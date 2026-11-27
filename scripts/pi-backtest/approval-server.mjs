@@ -20,23 +20,33 @@ async function main() {
   const { createResearchRuntime, runResearch } = await jiti.import("../../lib/backtest/research.ts");
   const { runTrial } = await jiti.import("../../lib/backtest/trial.ts");
   const { createApprovalStore } = await jiti.import("../../lib/backtest/approvals.ts");
+  const { createApprovalReports } = await jiti.import("../../lib/backtest/approval-reports.ts");
   const baseline = await loadRun("baseline");
   if (baseline.status !== "ready") throw new Error("B0 is not available.");
   const [, provider, modelId] = modelRef;
   const runtime = await createResearchRuntime();
   const model = runtime.getModel(provider, modelId);
   if (!model || !await runtime.getAuth(model)) throw new Error("The selected Pi model needs a credential in this process environment.");
+  const directory = join(process.cwd(), ".pi-backtest", "approvals");
+  const modelLabel = `${provider}/${modelId}`;
+  const reports = createApprovalReports(directory, baseline.run);
   const store = createApprovalStore({
-    directory: join(process.cwd(), ".pi-backtest", "approvals"), baseline: baseline.run,
+    directory, baseline: baseline.run, model: modelLabel,
     executor: (fast, recordRun) => runResearch({ runtime, model, baseline: baseline.run, fast,
       execute: async (b0, value) => {
         const trial = await runTrial(b0, value);
-        if (trial.status === "ready") recordRun(trial.run.runId);
+        if (trial.status === "ready") recordRun(trial.run.runId, reports.record(trial.run));
         return trial;
       },
     }),
   });
-  const server = createApprovalServer({ store, password, modelLabel: `${provider}/${modelId}`, reportOrigin: values["report-origin"] });
+  const server = createApprovalServer({ store, password, modelLabel, reportOrigin: values["report-origin"],
+    workerToken: process.env.PI_BACKTEST_WORKER_TOKEN, reportFor: reports.resolve,
+    async currentBaseline() {
+      const current = await loadRun("baseline");
+      return current.status === "ready" ? current.run.runId : null;
+    },
+  });
   server.on("error", (error) => { console.error(`Approval listener failed (${error.code ?? "unknown"}).`); process.exitCode = 1; });
   server.listen(30143, "127.0.0.1", () => {
     try {

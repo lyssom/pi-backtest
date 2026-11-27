@@ -6,19 +6,21 @@ import { parseTrialPeriod } from "./trial";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 const states = ["running", "completed", "failed", "interrupted"] as const;
-type Approval = {
+export type Approval = {
   baselineRunId: string;
   fast: string;
   status: typeof states[number];
   approvedAt: string;
   runId?: string;
+  reportSha256?: string;
+  model?: string;
   answer?: string;
   completedTools?: string[];
 };
-type Execute = (fast: string, recordRun: (runId: string) => void) => Promise<{ runId: string; answer: string; completedTools: string[] }>;
+type Execute = (fast: string, recordRun: (runId: string, reportSha256?: string) => void) => Promise<{ runId: string; answer: string; completedTools: string[] }>;
 
 // Single writer: the loopback server starts recovery only after acquiring its fixed port.
-export function createApprovalStore({ directory, baseline, executor }: { directory: string; baseline: FrozenRun; executor: Execute }) {
+export function createApprovalStore({ directory, baseline, executor, model }: { directory: string; baseline: FrozenRun; executor: Execute; model?: string }) {
   const baselineRunId = baseline.runId;
   if (!id(baselineRunId)) throw new Error("Invalid baseline ID.");
   const periods = ["1", "2", "3", "4", "5", "6", "7"].filter((fast) => parseTrialPeriod(fast, baseline) !== null);
@@ -32,7 +34,8 @@ export function createApprovalStore({ directory, baseline, executor }: { directo
     try {
       const receipt = JSON.parse(readFileSync(path(fast), "utf8")) as Approval | null;
       if (receipt?.baselineRunId !== baselineRunId || receipt.fast !== fast || !states.includes(receipt.status) ||
-          typeof receipt.approvedAt !== "string" || (receipt.runId !== undefined && !id(receipt.runId))) {
+          typeof receipt.approvedAt !== "string" || (receipt.runId !== undefined && !id(receipt.runId)) ||
+          (receipt.reportSha256 !== undefined && (!id(receipt.reportSha256) || !receipt.runId))) {
         throw new Error("Invalid approval receipt.");
       }
       return receipt;
@@ -52,17 +55,18 @@ export function createApprovalStore({ directory, baseline, executor }: { directo
     if (!periods.includes(fast)) return "invalid";
     if (get(fast)) return "exists";
     if (active || list().some((r) => r.status === "running")) return "busy";
-    write({ baselineRunId, fast, status: "running", approvedAt: new Date().toISOString() });
+    write({ baselineRunId, fast, status: "running", approvedAt: new Date().toISOString(), model });
     active = true;
     const patch = (update: Pick<Approval, "status" | "answer" | "completedTools">) => {
       const current = get(fast);
       if (current?.status === "running") write({ ...current, ...update });
     };
     void Promise.resolve().then(async () => {
-      const outcome = await executor(fast, (runId) => {
+      const outcome = await executor(fast, (runId, reportSha256) => {
         const current = get(fast);
-        if (current?.status !== "running" || !id(runId) || (current.runId && current.runId !== runId)) throw new Error("Mismatched trial receipt.");
-        if (!current.runId) write({ ...current, runId });
+        if (current?.status !== "running" || !id(runId) || (reportSha256 !== undefined && !id(reportSha256)) ||
+          (current.runId && (current.runId !== runId || current.reportSha256 !== reportSha256))) throw new Error("Mismatched trial receipt.");
+        if (!current.runId) write({ ...current, runId, reportSha256 });
       });
       if (get(fast)?.runId !== outcome.runId) throw new Error("Completion without a matching run receipt.");
       patch({ status: "completed", answer: outcome.answer, completedTools: outcome.completedTools });

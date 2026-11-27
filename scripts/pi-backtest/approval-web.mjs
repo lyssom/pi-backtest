@@ -27,11 +27,47 @@ ${receipt.answer ? `<h3>Pi 的说明</h3><pre>${escape(receipt.answer)}</pre>` :
 </main></body></html>`;
 }
 
-export function createApprovalServer({ store, password, reportOrigin, modelLabel }) {
+async function readBody(req, limit) {
+  const size = Number(req.headers["content-length"]);
+  if (!Number.isSafeInteger(size) || size < 1 || size > limit) return null;
+  req.setTimeout(5000, () => req.destroy());
+  let body = "";
+  for await (const chunk of req) body += chunk;
+  return body;
+}
+
+async function internalApproval(req, path, store, currentBaseline, reportFor, tokenHash, send) {
+  const json = (status, data) => send(status, JSON.stringify(data), { "Content-Type": "application/json; charset=utf-8" });
+  if (!tokenHash || !timingSafeEqual(digest(req.headers.authorization ?? ""), tokenHash)) return json(401, { error: "unauthorized" });
+  if (path === "/internal/approvals") {
+    if (req.method === "GET") return json(200, { receipts: store.list().map(({ baselineRunId, fast, status }) => ({ baselineRunId, fast, status })) });
+    if (req.method === "POST" && req.headers["content-type"] === "application/json") {
+      const text = await readBody(req, 512);
+      let body;
+      try { body = text && JSON.parse(text); } catch { /* handled as invalid input */ }
+      if (!body || typeof body !== "object" || Object.keys(body).length !== 2 || typeof body.baselineRunId !== "string" ||
+          !/^[a-f0-9]{64}$/.test(body.baselineRunId) || !store.periods.includes(body.fast)) return json(400, { error: "invalid" });
+      if (body.baselineRunId !== store.baselineRunId || body.baselineRunId !== await currentBaseline()) return json(409, { error: "stale_baseline" });
+      const approval = store.approve(body.fast);
+      if (approval === "invalid") return json(400, { error: "invalid" });
+      if (approval === "busy") return json(409, { error: "busy" });
+      return json(approval === "accepted" ? 202 : 200, { approvalId: `${body.baselineRunId}-${body.fast}` });
+    }
+  }
+  const match = /^\/internal\/approvals\/([a-f0-9]{64})-([1-7])(\/report)?$/.exec(path);
+  if (req.method !== "GET" || !match || match[1] !== store.baselineRunId) return json(404, { error: "not_found" });
+  const receipt = store.get(match[2]);
+  if (!receipt) return json(404, { error: "not_found" });
+  return match[3] ? json(200, { report: await reportFor(receipt) }) : json(200, receipt);
+}
+
+export function createApprovalServer({ store, password, reportOrigin, modelLabel, workerToken, currentBaseline = () => store.baselineRunId, reportFor = () => null }) {
   const report = new URL(reportOrigin);
   if (report.origin !== reportOrigin || !["http:", "https:"].includes(report.protocol)) throw new Error("Use a report origin without a path.");
   if (typeof password !== "string" || password.length < 24) throw new Error("A dedicated random research password is required.");
   const credentialHash = digest(`Basic ${Buffer.from(`research:${password}`).toString("base64")}`);
+  if (workerToken && (workerToken.length < 24 || workerToken === password)) throw new Error("Use a separate random worker token.");
+  const tokenHash = workerToken ? digest(`Bearer ${workerToken}`) : undefined;
   const server = createServer({ requestTimeout: 5000, headersTimeout: 3000, maxHeaderSize: 4096 }, async (req, res) => {
     const send = (status, body = "", headers = {}) => {
       res.writeHead(status, {
@@ -46,6 +82,7 @@ export function createApprovalServer({ store, password, reportOrigin, modelLabel
       const host = `127.0.0.1:${server.address().port}`;
       const origin = `http://${host}`;
       if (req.headers.host !== host) return send(403, "Use the loopback address.");
+      if (req.url?.startsWith("/internal/approvals")) return await internalApproval(req, req.url, store, currentBaseline, reportFor, tokenHash, send);
       if (!timingSafeEqual(digest(req.headers.authorization ?? ""), credentialHash)) {
         return send(401, "Research login required.", { "WWW-Authenticate": 'Basic realm="Pi Backtest Research", charset="UTF-8"' });
       }
@@ -60,12 +97,9 @@ export function createApprovalServer({ store, password, reportOrigin, modelLabel
       }
       if (req.method !== "POST" || req.url !== "/approve") return send(404);
       if (req.headers.origin !== origin) return send(403, "Approval requires a same-origin form.");
-      const size = Number(req.headers["content-length"]);
-      if (req.headers["content-type"] !== "application/x-www-form-urlencoded" || !Number.isSafeInteger(size) || size < 1 || size > 64) return send(400);
-      req.setTimeout(5000, () => req.destroy());
-      let body = "";
-      for await (const chunk of req) body += chunk;
-      const fast = /^fast=([1-7])$/.exec(body)?.[1];
+      if (req.headers["content-type"] !== "application/x-www-form-urlencoded") return send(400);
+      const body = await readBody(req, 64);
+      const fast = body && /^fast=([1-7])$/.exec(body)?.[1];
       const approval = fast ? store.approve(fast) : "invalid";
       if (approval === "invalid") return send(400, "请选择允许且不同于 B0 的快线周期。");
       if (approval === "busy") return send(409, "已有一项试跑在执行。请返回审批页查看回执。");
