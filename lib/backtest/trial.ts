@@ -19,8 +19,9 @@ export function parseTrialPeriod(raw: unknown, baseline: FrozenRun) {
   return fast <= trialMax(baseline) && fast !== baseline.report.strategy.fast ? fast : null;
 }
 
-export function tradeHref(trade: number, trial?: number) {
-  return `/backtest?${trial === undefined ? "" : `fast=${trial}&`}trade=${trade}#sample-chart`;
+export function tradeHref(trade: number, trial?: number, approvalId?: string) {
+  const selection = approvalId ? `approval=${encodeURIComponent(approvalId)}&` : trial === undefined ? "" : `fast=${trial}&`;
+  return `/backtest?${selection}trade=${trade}#sample-chart`;
 }
 
 export function createTrialRunner(engine: Engine) {

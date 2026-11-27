@@ -5,11 +5,12 @@ import { tradeHref } from "@/lib/backtest/trial";
 
 const signed = new Intl.NumberFormat("en-US", { signDisplay: "exceptZero", minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
-export function BaselineComparison({ baseline, variant, variantLabel = "A1", trialPeriod, formatTime, formatClose }: {
+export function BaselineComparison({ baseline, variant, variantLabel = "A1", trialPeriod, approvalId, formatTime, formatClose }: {
   baseline: FrozenRun;
   variant?: FrozenRun;
   variantLabel?: string;
   trialPeriod?: number;
+  approvalId?: string;
   formatTime: (time: number) => string;
   formatClose: (time: number) => string;
 }) {
@@ -44,7 +45,7 @@ export function BaselineComparison({ baseline, variant, variantLabel = "A1", tri
           <thead className="text-text-muted"><tr>{["入场 UTC", "B0 平仓 UTC / 净额", `${variantLabel} 平仓 UTC / 净额`].map((heading) => <th scope="col" key={heading} className="p-2">{heading}</th>)}</tr></thead>
           <tbody>{comparison.rows.map(({ entryBar, baseline: left, variant: right }) => <tr key={entryBar} className="border-t border-border">
             <td className="p-2">{formatTime(baseline.report.bars[entryBar].time)}</td>
-            <td className="p-2">{left ? <Link href={tradeHref(left.id, trialPeriod)} className="text-accent underline underline-offset-4">{describe(left)}</Link> : "—"}</td>
+            <td className="p-2">{left ? <Link href={tradeHref(left.id, trialPeriod, approvalId)} className="text-accent underline underline-offset-4">{describe(left)}</Link> : "—"}</td>
             <td className="p-2">{describe(right)}</td>
           </tr>)}</tbody>
         </table>
