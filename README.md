@@ -1,4 +1,25 @@
-# Pi Web
+# Pi Backtest
+
+A strategy research workbench for crypto perpetual futures, built on [Pi Web](https://github.com/agegr/pi-web) and [Pi](https://github.com/earendil-works/pi).
+
+**Status: project bootstrap.** The web foundation is in place; research tools, backtest execution, and the strategy workspace are not connected yet. No live trading or exchange-account access.
+
+[中文产品说明与迁移边界](./docs/pi-backtest/FOUNDATION.zh-CN.md)
+
+## Local development
+
+```bash
+npm ci
+PI_CODING_AGENT_DIR="$HOME/.pi-backtest/agent" npm run dev
+```
+
+Open <http://127.0.0.1:30141>. Use the separate agent directory to avoid sharing sessions and provider configuration with an existing Pi installation. This development bootstrap still exposes upstream coding features; run it on loopback only, not as a public service.
+
+---
+
+## Upstream Pi Web reference
+
+The instructions below refer to the original Pi Web project. Its npm package, demo, and releases are not Pi Backtest distributions.
 
 [中文文档](./docs/README.zh-CN.md) | [日本語](./docs/README.ja.md) | [Русский](./docs/README.ru.md)
 

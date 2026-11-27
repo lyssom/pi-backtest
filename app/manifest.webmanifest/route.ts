@@ -1,14 +1,15 @@
 import type { MetadataRoute } from "next";
+import { PRODUCT_DESCRIPTION, PRODUCT_NAME } from "../../lib/product-brand";
 
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  const appName = process.env.PI_WEB_APP_NAME?.trim() || "Pi Web";
+  const appName = process.env.PI_WEB_APP_NAME?.trim() || PRODUCT_NAME;
   const manifest: MetadataRoute.Manifest = {
     id: "/",
     name: appName,
     short_name: appName,
-    description: "Local web interface for the pi coding agent",
+    description: PRODUCT_DESCRIPTION,
     start_url: "/",
     scope: "/",
     display: "standalone",

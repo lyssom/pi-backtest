@@ -18,14 +18,15 @@ test("manifest route reads the app name at runtime without changing other metada
     assert.equal(dynamic, "force-dynamic");
     delete process.env.PI_WEB_APP_NAME;
     const defaults = await getManifest();
-    assert.equal(defaults.name, "Pi Web");
-    assert.equal(defaults.short_name, "Pi Web");
+    assert.equal(defaults.name, "Pi Backtest");
+    assert.equal(defaults.short_name, "Pi Backtest");
+    assert.equal(defaults.description, "A strategy research workbench powered by Pi");
 
     // Reuse the same imported function: the environment must not be captured
     // at module load time (or baked into a statically generated manifest).
     for (const [value, expected] of [
-      ["", "Pi Web"],
-      [" \t\n ", "Pi Web"],
+      ["", "Pi Backtest"],
+      [" \t\n ", "Pi Backtest"],
       ["Work Pi", "Work Pi"],
       ["  工作 Pi 🚀 \n", "工作 Pi 🚀"],
       ["Another Pi", "Another Pi"],
