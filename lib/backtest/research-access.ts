@@ -43,12 +43,12 @@ export function parseApprovalId(value: unknown) {
   return match ? { baselineRunId: match[1], fast: match[2] } : null;
 }
 
-export async function readSmallJson(request: Request): Promise<Record<string, unknown> | null> {
+export async function readSmallJson(request: Request, limit = 512): Promise<Record<string, unknown> | null> {
   if (request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") return null;
   const reader = request.body?.getReader();
-  if (!reader || Number(request.headers.get("content-length")) > 512) return null;
+  if (!reader || Number(request.headers.get("content-length")) > limit) return null;
   try {
-    const buffer = new Uint8Array(512);
+    const buffer = new Uint8Array(limit);
     let size = 0;
     while (true) {
       const { value, done } = await reader.read();

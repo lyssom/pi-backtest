@@ -58,7 +58,7 @@ export default async function BacktestPage({ searchParams }: { searchParams: Pro
           <p className="text-sm font-medium text-text-muted">Pi Backtest / 研究工作台</p>
           <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">{baseline ? "冻结基线 · B0" : "历史回测样例"}</h1>
         </div>
-        {!researchEnabled && <Link href="/" className={`text-sm ${linkStyle}`}>返回 Pi 对话</Link>}
+        <Link href={researchEnabled ? "/research" : "/"} className={`text-sm ${linkStyle}`}>{researchEnabled ? "返回研究对话" : "返回 Pi 对话"}</Link>
       </header>
       {!report ? <section className={panel}>
         <h2 className="font-semibold">{b0.status === "invalid" ? "B0 基线未通过校验" : "尚无可用的历史报告"}</h2>

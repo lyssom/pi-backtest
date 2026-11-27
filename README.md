@@ -2,7 +2,7 @@
 
 A strategy research workbench for crypto perpetual futures, built on [Pi Web](https://github.com/agegr/pi-web) and [Pi](https://github.com/earendil-works/pi).
 
-**Status: frozen baseline and single-parameter trial.** The strategy workspace shows a pinned baseline, trade evidence and a bounded comparison. Browser trials re-use the frozen candles and never write to the baseline. Pi can run and explain one approved trial from the CLI or directly inside `/backtest` when its dedicated HTTPS research access is configured. The workbench saves receipts across reconnects and service restarts; it does not automatically resume interrupted Pi sessions. No live trading or exchange-account access.
+**Status: frozen baseline and single-parameter trial.** The strategy workspace shows a pinned baseline, trade evidence and a bounded comparison. Browser trials re-use the frozen candles and never write to the baseline. With HTTPS research access configured, Pi Web opens a restricted research conversation at `/research`: ask in text, approve in the conversation, and follow the result to `/backtest`. The parameter panel and CLI remain shortcuts. Receipts survive reconnects and service restarts; the conversation itself stays in memory. No live trading or exchange-account access.
 
 [中文产品说明与迁移边界](./docs/pi-backtest/FOUNDATION.zh-CN.md)
 
@@ -25,7 +25,7 @@ node scripts/pi-backtest/research.mjs --approve-fast=5 --model=deepseek/deepseek
 
 The Pi SDK uses the selected model to read B0, run the approved trial, and inspect the resulting trade differences. This sends public-market-derived evidence to the selected model provider. It neither loads your usual Pi session/config nor exposes terminal, file, or extension tools.
 
-For same-page browser approval, configure the trusted HTTPS workbench origin, a research password, and a distinct loopback worker token as described in [the implementation plan](docs/pi-backtest/IMPLEMENTATION-PLAN.zh-CN.md). A plain HTTP preview never enables research approval. To run the loopback worker (which still has a legacy operator page for migration), use:
+For the Pi Web research conversation, configure the trusted HTTPS origin, a research password, and a distinct loopback worker token as described in [the implementation plan](docs/pi-backtest/IMPLEMENTATION-PLAN.zh-CN.md). The conversation reuses Pi Web's composer and message rendering, but not its generic Agent endpoints or coding tools. A plain HTTP preview never enables research approval. To run the loopback worker (which still has a legacy operator page for migration), use:
 
 ```sh
 (umask 077; set -C; openssl rand -hex 32 > "$HOME/.pi-backtest-research-password")

@@ -1,6 +1,13 @@
 # Pi Backtest：把 Pi 试跑审批并回研究工作台
 
-**状态：A（回执与内部合约）、B（同页流程）已实现并通过本机 HTTPS 验收；C（PC 的 HTTPS 入口）待确认。** 下文中的现状表以 `1205e37` 为改造前基线。现有内网 HTTP 预览和 B0 不变。
+**状态：A（回执与内部合约）、B（同页参数入口）以及补充的 Pi Web 研究对话均通过本机 HTTPS 验收；C（PC 的 HTTPS 入口）待确认。** 下文中的现状表以 `1205e37` 为改造前基线。现有内网 HTTP 预览和 B0 不变。
+
+## 产品修正：对话是主入口
+
+- 研究 HTTPS 站点访问 `/` 会进入 `/research`，复用 Pi Web 的 `ChatInput` 和 `MessageView`；`/backtest` 是报告和证据页，原有两种参数试跑按钮是快捷方式。普通未配置研究 HTTPS 的 Pi Web 入口照旧。
+- 真实 Pi SDK 会话只启用 `read_baseline`、`propose_trial`、`run_approved_trial`、`inspect_trial`。模型提出建议后，`propose_trial` 在当前工具循环内暂停，生成服务器审批卡；只接受绑定会话、卡片、B0 和精确参数的按钮操作。批准后复用同一会话，不偷偷补发用户提示，也不启动后台第二个 Pi。已有记录只读原结果。应用和 worker 都不走通用 Agent、文件和终端接口。
+- 单操作者、同时一个内存会话；浏览器离开可重连，进程重启不恢复聊天，已批准的回执和报告仍可读。当前纯文本、每会话最多 10 条用户消息、空闲 30 分钟回收；审批卡 90 秒过期。任意自然语言规则生成、图片、多用户、持久会话和全功能 Pi 聊天均不在这条切片内。
+- 真实浏览器验收：一条「以 B0 为基线，把 EMA 快线改成 7，看看少了哪几笔」产生一张审批卡；刷新后点一次批准，关页再开仍拿到同一会话的解读与 `9254e60dabe8…` 报告。报告对应 4 笔和净额 `+2.871705 USDT`；从报告返回后可在同一会话追问，且不重跑。B0、A1 和旧回执均未改动。
 
 ## 1. 要交付的体验
 
@@ -89,5 +96,5 @@ PC 浏览器 → HTTPS 入口（路由和方法白名单） → /backtest + 同�
 
 - Next.js 继续只监听本机。为研究入口设置 `PI_BACKTEST_RESEARCH_ORIGIN`（精确的 `https://主机[:端口]`，无末尾 `/`）、`PI_BACKTEST_RESEARCH_PASSWORD`（独立研究密码）、`PI_BACKTEST_WORKER_TOKEN`（与密码不同的私有随机令牌）。三个配置必须同时存在。域名需要放进 `PI_WEB_ALLOWED_HOSTS`；专用工作台实例不启用上游全局 `PI_WEB_PASSWORD`，改由研究路由针对研究登录独立验权。凭据通过私有服务配置注入，不放入源码或 `NEXT_PUBLIC_*`。
 - 审批执行进程仍由 `scripts/pi-backtest/approval-server.mjs` 启动，保持 `127.0.0.1:30143`，配置同一个 `PI_BACKTEST_WORKER_TOKEN`，以及模型所需凭据。浏览器和公网反代都不能访问 `/internal/approvals`。旧 EMA 5 回执读取时核对确定性重放，新回执将候选报告及其 SHA-256 一起持久化。
-- HTTPS 反代显式允许 `GET /backtest` 和必要静态资源，以及 `POST/DELETE /api/backtest/research-session`、`GET/POST /api/backtest/approvals`、`GET /api/backtest/approvals/<id>`。保留浏览器看到的 `Host`、覆盖 `X-Forwarded-Proto: https` 并移除客户端提供的转发头；不要缓存回执、登录响应或带私有数据的页面。原 HTTP 入口继续只转发报告和必要静态资源。
-- 现场验收：`node scripts/pi-backtest/research-smoke.mjs --origin=https://<域名> --password-file=<私有文件> --approve-fast=6`。该命令在所选回执不存在时会实际批准一次。`--staging-cert` 只允许 `127.0.0.1` 的证书测试，不用于用户 PC 的验收。
+- HTTPS 反代显式允许 `GET /`、`GET /research`、`GET /backtest` 和必要静态资源，以及 `POST/DELETE /api/backtest/research-session`、`GET/POST /api/backtest/approvals`、`GET /api/backtest/approvals/<id>`。对话只加 `GET /api/backtest/research-chat`，以及 `POST /api/backtest/research-chat/{message,decision,stop,reset}`，不转发 `/internal/*` 或通用 Agent API。保留浏览器看到的 `Host`、覆盖 `X-Forwarded-Proto: https` 并移除客户端提供的转发头；不要缓存回执、登录响应或带私有数据的页面。原 HTTP 入口继续只转发报告和必要静态资源。
+- 现场验收：`node scripts/pi-backtest/research-chat-smoke.mjs --origin=https://<域名> --password-file=<私有文件> --approve-fast=7`。该命令会开启新的验收对话，且在所选回执不存在时会实际批准一次。`--staging-cert` 只允许 `127.0.0.1` 的证书测试，不用于用户 PC 的验收。

@@ -102,4 +102,4 @@ function routeRequest(request: NextRequest): NextResponse {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/", "/backtest", "/login", "/api/:path*"] };
+export const config = { matcher: ["/", "/backtest", "/research", "/login", "/api/:path*"] };

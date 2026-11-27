@@ -66,6 +66,9 @@ interface Props {
   isStreaming: boolean;
   /** Text-only composer without the session controls or outer spacing. */
   compact?: boolean;
+  /** Disable suggestions from the ordinary Pi Web session catalogue in an isolated composer. */
+  allowSessionReferences?: boolean;
+  inputLabel?: string;
   model?: { provider: string; modelId: string } | null;
   isAutoModelSelection?: boolean;
   modelNames?: Record<string, string>;
@@ -774,6 +777,8 @@ export const ChatInput = memo(forwardRef<ChatInputHandle, Props>(function ChatIn
   cwd,
   onAttachFiles,
   compact = false,
+  allowSessionReferences = true,
+  inputLabel,
 }: Props, ref) {
   const { t, locale } = useI18n();
   const { fontSize } = useChatAppearance();
@@ -1385,8 +1390,8 @@ export const ChatInput = memo(forwardRef<ChatInputHandle, Props>(function ChatIn
 
   const updateHashQuery = useCallback((text: string, cursor: number | null) => {
     const pos = cursor ?? text.length;
-    setHashQuery(extractHashQuery(text.slice(0, pos)));
-  }, []);
+    setHashQuery(allowSessionReferences ? extractHashQuery(text.slice(0, pos)) : null);
+  }, [allowSessionReferences]);
 
   const atQueryText = atQuery?.query ?? null;
   const atLocalMatches: FileIndexEntry[] = React.useMemo(() => (
@@ -2833,7 +2838,7 @@ export const ChatInput = memo(forwardRef<ChatInputHandle, Props>(function ChatIn
           <textarea
             ref={textareaRef}
             className="chat-input-textarea"
-            aria-label={compact ? t("chat.askInSideChat") : undefined}
+            aria-label={inputLabel ?? (compact ? t("chat.askInSideChat") : undefined)}
             value={value}
             onChange={(e) => {
               valueRef.current = e.target.value;
