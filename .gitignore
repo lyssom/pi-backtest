@@ -13,6 +13,8 @@
 # testing
 /coverage
 /test-results/
+/.pi-backtest/
+/scripts/pi-backtest/__pycache__/
 
 # next.js
 /.next/

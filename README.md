@@ -2,7 +2,7 @@
 
 A strategy research workbench for crypto perpetual futures, built on [Pi Web](https://github.com/agegr/pi-web) and [Pi](https://github.com/earendil-works/pi).
 
-**Status: project bootstrap.** The web foundation is in place; research tools, backtest execution, and the strategy workspace are not connected yet. No live trading or exchange-account access.
+**Status: read-only historical sample.** The strategy workspace can show rules, candles and trade evidence for a fixed example. Agent research tools and online execution are not connected yet. No live trading or exchange-account access.
 
 [中文产品说明与迁移边界](./docs/pi-backtest/FOUNDATION.zh-CN.md)
 
@@ -13,7 +13,9 @@ npm ci
 PI_CODING_AGENT_DIR="$HOME/.pi-backtest/agent" npm run dev
 ```
 
-Open <http://127.0.0.1:30141>. Use the separate agent directory to avoid sharing sessions and provider configuration with an existing Pi installation. This development bootstrap still exposes upstream coding features; run it on loopback only, not as a public service.
+Open <http://127.0.0.1:30141>. Use the separate agent directory to avoid sharing sessions and provider configuration with an existing Pi installation. The development bootstrap still exposes upstream coding features; run it on loopback only, not as a public service.
+
+To prepare the historical sample, run `python3 scripts/pi-backtest/prepare_sample.py` once and open [the read-only workspace](http://127.0.0.1:30141/backtest). The script verifies a pinned public market archive; neither the archive nor the generated report is committed.
 
 ---
 

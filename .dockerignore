@@ -7,6 +7,7 @@ e2e
 node_modules
 coverage
 test-results
+.pi-backtest
 .env
 .env.*
 !.env.example
