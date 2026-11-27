@@ -61,7 +61,33 @@ async function internalApproval(req, path, store, currentBaseline, reportFor, to
   return match[3] ? json(200, { report: await reportFor(receipt) }) : json(200, receipt);
 }
 
-export function createApprovalServer({ store, password, reportOrigin, modelLabel, workerToken, currentBaseline = () => store.baselineRunId, reportFor = () => null }) {
+async function internalChat(req, path, chat, tokenHash, send) {
+  const json = (status, data) => send(status, JSON.stringify(data), { "Content-Type": "application/json; charset=utf-8" });
+  if (!tokenHash || !timingSafeEqual(digest(req.headers.authorization ?? ""), tokenHash)) return json(401, { error: "unauthorized" });
+  if (!chat) return json(404, { error: "disabled" });
+  if (req.method === "GET" && path === "/internal/research-chat") return json(200, { chat: chat.view() });
+  const action = /^\/internal\/research-chat\/(message|decision|stop|reset)$/.exec(path)?.[1];
+  if (req.method !== "POST" || !action) return json(404, { error: "not_found" });
+  if (req.headers["content-type"] !== "application/json") return json(400, { error: "invalid" });
+  const text = await readBody(req, 8192);
+  let body;
+  try { body = text && JSON.parse(text); } catch { /* invalid JSON */ }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return json(400, { error: "invalid" });
+  const uuid = (value) => typeof value === "string" && /^[a-f0-9-]{36}$/.test(value);
+  const keys = Object.keys(body).length;
+  let status = "invalid";
+  if (action === "message" && keys === 2 && (body.sessionId === null || uuid(body.sessionId)) && typeof body.message === "string") {
+    status = await chat.send(body.sessionId, body.message);
+  } else if (action === "decision" && keys === 3 && uuid(body.sessionId) && uuid(body.cardId) && typeof body.approved === "boolean") {
+    status = await chat.decide(body.sessionId, body.cardId, body.approved);
+  } else if (keys === 1 && uuid(body.sessionId)) {
+    if (action === "stop") status = chat.stop(body.sessionId);
+    if (action === "reset") status = await chat.reset(body.sessionId);
+  }
+  return status === "accepted" ? json(202, { chat: chat.view() }) : json(status === "invalid" ? 400 : status === "limit" ? 429 : status === "unavailable" ? 503 : 409, { error: status });
+}
+
+export function createApprovalServer({ store, password, reportOrigin, modelLabel, workerToken, currentBaseline = () => store.baselineRunId, reportFor = () => null, chat = undefined }) {
   const report = new URL(reportOrigin);
   if (report.origin !== reportOrigin || !["http:", "https:"].includes(report.protocol)) throw new Error("Use a report origin without a path.");
   if (typeof password !== "string" || password.length < 24) throw new Error("A dedicated random research password is required.");
@@ -83,6 +109,7 @@ export function createApprovalServer({ store, password, reportOrigin, modelLabel
       const origin = `http://${host}`;
       if (req.headers.host !== host) return send(403, "Use the loopback address.");
       if (req.url?.startsWith("/internal/approvals")) return await internalApproval(req, req.url, store, currentBaseline, reportFor, tokenHash, send);
+      if (req.url?.startsWith("/internal/research-chat")) return await internalChat(req, req.url, chat, tokenHash, send);
       if (!timingSafeEqual(digest(req.headers.authorization ?? ""), credentialHash)) {
         return send(401, "Research login required.", { "WWW-Authenticate": 'Basic realm="Pi Backtest Research", charset="UTF-8"' });
       }

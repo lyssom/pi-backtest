@@ -21,6 +21,7 @@ async function main() {
   const { runTrial } = await jiti.import("../../lib/backtest/trial.ts");
   const { createApprovalStore } = await jiti.import("../../lib/backtest/approvals.ts");
   const { createApprovalReports } = await jiti.import("../../lib/backtest/approval-reports.ts");
+  const { createResearchChat } = await jiti.import("../../lib/backtest/research-chat.ts");
   const baseline = await loadRun("baseline");
   if (baseline.status !== "ready") throw new Error("B0 is not available.");
   const [, provider, modelId] = modelRef;
@@ -40,12 +41,14 @@ async function main() {
       },
     }),
   });
+  const currentBaseline = async () => {
+    const current = await loadRun("baseline");
+    return current.status === "ready" ? current.run.runId : null;
+  };
+  const workerToken = process.env.PI_BACKTEST_WORKER_TOKEN;
+  const chat = workerToken ? createResearchChat({ store, reports, baseline: baseline.run, runtime, model, currentBaseline }) : undefined;
   const server = createApprovalServer({ store, password, modelLabel, reportOrigin: values["report-origin"],
-    workerToken: process.env.PI_BACKTEST_WORKER_TOKEN, reportFor: reports.resolve,
-    async currentBaseline() {
-      const current = await loadRun("baseline");
-      return current.status === "ready" ? current.run.runId : null;
-    },
+    workerToken, reportFor: reports.resolve, currentBaseline, chat,
   });
   server.on("error", (error) => { console.error(`Approval listener failed (${error.code ?? "unknown"}).`); process.exitCode = 1; });
   server.listen(30143, "127.0.0.1", () => {

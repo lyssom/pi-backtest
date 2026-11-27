@@ -17,7 +17,9 @@ export type Approval = {
   answer?: string;
   completedTools?: string[];
 };
-type Execute = (fast: string, recordRun: (runId: string, reportSha256?: string) => void) => Promise<{ runId: string; answer: string; completedTools: string[] }>;
+type Outcome = { runId: string; answer: string; completedTools: string[] };
+export type ApprovalTicket = { status: "accepted"; recordRun: (runId: string, reportSha256?: string) => void; complete: (outcome: Outcome) => void; fail: () => void };
+type Execute = (fast: string, recordRun: ApprovalTicket["recordRun"]) => Promise<Outcome>;
 
 // Single writer: the loopback server starts recovery only after acquiring its fixed port.
 export function createApprovalStore({ directory, baseline, executor, model }: { directory: string; baseline: FrozenRun; executor: Execute; model?: string }) {
@@ -51,30 +53,45 @@ export function createApprovalStore({ directory, baseline, executor, model }: { 
     for (const receipt of list()) if (receipt.status === "running") write({ ...receipt, status: "interrupted" });
   }
 
-  function approve(fast: string): "invalid" | "exists" | "busy" | "accepted" {
-    if (!periods.includes(fast)) return "invalid";
-    if (get(fast)) return "exists";
-    if (active || list().some((r) => r.status === "running")) return "busy";
+  function reserve(fast: string): ApprovalTicket | { status: "invalid" | "exists" | "busy" } {
+    if (!periods.includes(fast)) return { status: "invalid" };
+    if (get(fast)) return { status: "exists" };
+    if (active || list().some((r) => r.status === "running")) return { status: "busy" };
     write({ baselineRunId, fast, status: "running", approvedAt: new Date().toISOString(), model });
     active = true;
-    const patch = (update: Pick<Approval, "status" | "answer" | "completedTools">) => {
-      const current = get(fast);
-      if (current?.status === "running") write({ ...current, ...update });
-    };
-    void Promise.resolve().then(async () => {
-      const outcome = await executor(fast, (runId, reportSha256) => {
+    let open = true;
+    const finish = (update: Pick<Approval, "status" | "answer" | "completedTools">) => {
+      if (!open) return;
+      try {
         const current = get(fast);
-        if (current?.status !== "running" || !id(runId) || (reportSha256 !== undefined && !id(reportSha256)) ||
+        if (current?.status === "running") write({ ...current, ...update });
+      } finally { open = false; active = false; }
+    };
+    return {
+      status: "accepted",
+      recordRun(runId, reportSha256) {
+        const current = get(fast);
+        if (!open || current?.status !== "running" || !id(runId) || (reportSha256 !== undefined && !id(reportSha256)) ||
           (current.runId && (current.runId !== runId || current.reportSha256 !== reportSha256))) throw new Error("Mismatched trial receipt.");
         if (!current.runId) write({ ...current, runId, reportSha256 });
-      });
-      if (get(fast)?.runId !== outcome.runId) throw new Error("Completion without a matching run receipt.");
-      patch({ status: "completed", answer: outcome.answer, completedTools: outcome.completedTools });
-    }).catch(() => patch({ status: "failed" })).catch(() => {
-      // A disk error leaves the last receipt intact and blocks new approvals until recovery.
-      console.error("Could not update the Pi research receipt.");
-    }).finally(() => { active = false; });
-    return "accepted";
+      },
+      complete(outcome) {
+        if (get(fast)?.runId !== outcome.runId) throw new Error("Completion without a matching run receipt.");
+        finish({ status: "completed", answer: outcome.answer, completedTools: outcome.completedTools });
+      },
+      fail() { finish({ status: "failed" }); },
+    };
   }
-  return { baselineRunId, periods, get, list, approve, recoverInterrupted };
+
+  function approve(fast: string) {
+    const ticket = reserve(fast);
+    if (ticket.status === "accepted") {
+      void Promise.resolve().then(() => executor(fast, ticket.recordRun)).then(ticket.complete).catch(ticket.fail).catch(() => {
+        // A disk error leaves the last receipt intact and blocks new approvals until recovery.
+        console.error("Could not update the Pi research receipt.");
+      });
+    }
+    return ticket.status;
+  }
+  return { baselineRunId, periods, get, list, approve, reserve, recoverInterrupted };
 }
