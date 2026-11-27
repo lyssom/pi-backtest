@@ -30,24 +30,25 @@ export type SampleTrade = SampleReport["trades"][number];
 
 type SampleResult = { status: "ready"; report: SampleReport } | { status: "missing" | "invalid" };
 
+export function validateReport(report: unknown): report is SampleReport {
+  if (!Value.Check(reportSchema, report)) return false;
+  const { bars, trades, strategy, summary } = report;
+  const validBar = (bar: SampleReport["bars"][number], i: number) =>
+    bar.time === bars[0].time + i * HOUR_MS && bar.low <= Math.min(bar.open, bar.close) && bar.high >= Math.max(bar.open, bar.close);
+  const validTrades = trades.every(({ id, entry, exit, exitReason }, i) => {
+    if (id !== i + 1 || entry.bar > exit.bar || exit.bar >= bars.length || (i > 0 && entry.bar <= trades[i - 1].exit.bar)) return false;
+    if (entry.signalBar !== entry.bar - 1 || entry.price !== bars[entry.bar].open) return false;
+    return exitReason === "cross"
+      ? exit.signalBar === exit.bar - 1 && exit.bar > entry.bar && exit.price === bars[exit.bar].open
+      : exit.signalBar === null && exit.bar === bars.length - 1 && exit.price === bars[exit.bar].close;
+  });
+  return strategy.fast < strategy.slow && bars.every(validBar) && validTrades && summary.closed === trades.length && summary.wins === trades.filter(({ net }) => net > 0).length;
+}
+
 export async function loadSample(file = join(process.cwd(), ".pi-backtest", "sample.json")): Promise<SampleResult> {
   try {
     const report: unknown = JSON.parse(await readFile(file, "utf8"));
-    if (!Value.Check(reportSchema, report)) return { status: "invalid" };
-    const { bars, trades, strategy, summary } = report;
-    const validBar = (bar: SampleReport["bars"][number], i: number) =>
-      bar.time === bars[0].time + i * HOUR_MS && bar.low <= Math.min(bar.open, bar.close) && bar.high >= Math.max(bar.open, bar.close);
-    const validTrades = trades.every(({ id, entry, exit, exitReason }, i) => {
-      if (id !== i + 1 || entry.bar > exit.bar || exit.bar >= bars.length) return false;
-      if (entry.signalBar !== entry.bar - 1 || entry.price !== bars[entry.bar].open) return false;
-      return exitReason === "cross"
-        ? exit.signalBar === exit.bar - 1 && exit.bar > entry.bar && exit.price === bars[exit.bar].open
-        : exit.signalBar === null && exit.bar === bars.length - 1 && exit.price === bars[exit.bar].close;
-    });
-    if (strategy.fast >= strategy.slow || !bars.every(validBar) || !validTrades || summary.closed !== trades.length || summary.wins !== trades.filter(({ net }) => net > 0).length) {
-      return { status: "invalid" };
-    }
-    return { status: "ready", report };
+    return validateReport(report) ? { status: "ready", report } : { status: "invalid" };
   } catch (error) {
     return { status: (error as NodeJS.ErrnoException)?.code === "ENOENT" ? "missing" : "invalid" };
   }

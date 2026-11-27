@@ -17,6 +17,7 @@ URL = f'https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1h/{F
 SHA256 = '2e736b9e792d5ae9d4607d7426e4530020762cb898d580b18d3fb0faf9d2ba8e'
 FIXED_NOTIONAL = Decimal(1000)
 FEE_RATE = Decimal('0.0005')
+STORE = Path(__file__).resolve().parents[2] / '.pi-backtest'
 
 
 def parse_candles(text, start, end):
@@ -85,15 +86,19 @@ def build_report(bars, fast=3, slow=8):
                              net=float(round(gross_total - fees_total, 6)), fees=float(round(fees_total, 6))))
 
 
-def main():
+def fetch_bars():
     with urlopen(URL, timeout=20) as response:
         raw = response.read(512 * 1024 + 1)
     if len(raw) > 512 * 1024 or hashlib.sha256(raw).hexdigest() != SHA256:
         raise ValueError('Public archive did not match the pinned SHA-256')
     with ZipFile(io.BytesIO(raw)) as archive:
-        bars = parse_candles(archive.read(f'{FILE}.csv').decode('utf-8-sig'), START, END)
+        return parse_candles(archive.read(f'{FILE}.csv').decode('utf-8-sig'), START, END)
+
+
+def main():
+    bars = fetch_bars()
     report = build_report(bars)
-    out = Path(__file__).resolve().parents[2] / '.pi-backtest' / 'sample.json'
+    out = STORE / 'sample.json'
     out.parent.mkdir(exist_ok=True)
     temp = out.with_suffix('.tmp')
     temp.write_text(json.dumps(report, allow_nan=False), encoding='utf-8')

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { loadRun } from "@/lib/backtest/baseline";
 import { HOUR_MS, loadSample, SAMPLE_SOURCE, type SampleReport, type SampleTrade } from "@/lib/backtest/sample";
+import { BaselineComparison } from "./baseline-comparison";
 import { SampleChart } from "./sample-chart";
 
 export const metadata: Metadata = { title: "回测样例 · Pi Backtest" };
@@ -26,28 +28,31 @@ function TradeEvidence({ report, trade }: { report: SampleReport; trade: SampleT
 }
 
 export default async function BacktestPage({ searchParams }: { searchParams: Promise<{ trade?: string | string[] }> }) {
-  const [{ trade }, result] = await Promise.all([searchParams, loadSample()]);
-  const report = result.status === "ready" ? result.report : undefined;
+  const [{ trade }, b0, a1] = await Promise.all([searchParams, loadRun("baseline"), loadRun("a1")]);
+  const baseline = b0.status === "ready" ? b0.run : undefined;
+  const sample = b0.status === "missing" ? await loadSample() : undefined;
+  const report = baseline?.report ?? (sample?.status === "ready" ? sample.report : undefined);
   const selected = report?.trades.find(({ id }) => String(id) === trade) ?? report?.trades[0];
   return <main lang="zh-CN" className="h-dvh overflow-y-auto bg-bg text-text">
     <div className="mx-auto grid max-w-[1120px] gap-4 px-4 py-6 sm:px-8 sm:py-8">
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-medium text-text-muted">Pi Backtest / 研究工作台</p>
-          <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">历史回测样例</h1>
+          <h1 className="mt-1 text-2xl font-semibold sm:text-3xl">{baseline ? "冻结基线 · B0" : "历史回测样例"}</h1>
         </div>
         <Link href="/" className={`text-sm ${linkStyle}`}>返回 Pi 对话</Link>
       </header>
       {!report ? <section className={panel}>
-        <h2 className="font-semibold">{result.status === "missing" ? "尚未准备历史样例" : "样例文件未通过校验"}</h2>
-        <p className="mt-2 text-sm text-text-muted">在项目根目录运行下方命令后刷新。页面不会用合成数据替代。</p>
-        <pre className="mt-3 overflow-x-auto text-sm"><code>python3 scripts/pi-backtest/prepare_sample.py</code></pre>
+        <h2 className="font-semibold">{b0.status === "invalid" ? "B0 基线未通过校验" : "尚无可用的历史报告"}</h2>
+        <p className="mt-2 text-sm text-text-muted">在项目根目录运行下方命令生成或核验。页面不会替换已冻结的基线或回退到合成数据。</p>
+        <pre className="mt-3 overflow-x-auto text-sm"><code>python3 scripts/pi-backtest/baseline.py</code></pre>
       </section> : <>
         <section aria-labelledby="sample-rule" className={panel}>
           <h2 id="sample-rule" className="font-semibold">规则 · BTCUSDT · 1h</h2>
           <p className="mt-2 text-sm">EMA {report.strategy.fast} 上穿 EMA {report.strategy.slow} 做多，下穿平多。收盘确认、下一根开盘模拟成交；只持一笔，窗口结束按最后收盘价退出。</p>
           <p className="mt-2 text-sm text-text-muted">名义仓位 {amount.format(report.strategy.notional)} USDT；手续费每边 {report.strategy.feeBps} bps。使用永续行情，但这个样例不模拟资金费、滑点、保证金或强平。</p>
           <p className="mt-2 text-sm text-text-muted">{utc(report.bars[0].time)} 至 {utc(report.bars.at(-1)!.time + HOUR_MS)} UTC（右开） · {report.bars.length} 根 · <a href={SAMPLE_SOURCE} className={linkStyle}>Binance 公共行情归档</a></p>
+          {baseline ? <a href="#baseline-comparison" className={`mt-2 inline-block text-sm ${linkStyle}`}>查看 B0 / A1 同数据对照</a> : <p className="mt-2 text-sm text-text-muted">这份样例尚未冻结为基线。</p>}
         </section>
         <dl aria-label="样例绩效" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([
@@ -70,7 +75,7 @@ export default async function BacktestPage({ searchParams }: { searchParams: Pro
           <h2 id="sample-trades" className="font-semibold">逐笔成交</h2>
           {!report.trades.length ? <p className="mt-3 text-sm text-text-muted">这段历史没有已平交易。</p> :
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[500px] text-left text-sm tabular-nums">
+              <table aria-label="报告逐笔成交" className="w-full min-w-[500px] text-left text-sm tabular-nums">
                 <thead className="text-text-muted"><tr>{["交易", "开仓 UTC", "平仓 UTC", "退出", "净盈亏 (USDT)"].map((heading) => <th scope="col" key={heading} className="p-2">{heading}</th>)}</tr></thead>
                 <tbody>{report.trades.map((item) => <tr key={item.id} className={item.id === selected?.id ? "bg-bg-selected" : ""}>
                   <td className="p-2"><Link href={`/backtest?trade=${item.id}#sample-chart`} aria-current={item.id === selected?.id ? "true" : undefined} className={linkStyle}>查看第 {item.id} 笔</Link></td>
@@ -82,6 +87,7 @@ export default async function BacktestPage({ searchParams }: { searchParams: Pro
               </table>
             </div>}
         </section>
+        {baseline && <BaselineComparison baseline={baseline} variant={a1.status === "ready" ? a1.run : undefined} formatTime={utc} formatClose={closeUtc} />}
       </>}
     </div>
   </main>;

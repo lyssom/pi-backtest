@@ -1,6 +1,6 @@
 # Pi Backtest：产品底座
 
-Pi Backtest 是独立的永续合约策略研究工作台。上游是 `agegr/pi-web`；第一版复用 Pi 的对话、图片附件、模型配置及工具循环，不把聊天记录当作回测账本。现有 `/backtest` 支持读取固定历史样例；没有接入在线回测 API、挂载旧工作区或开放交易接口。
+Pi Backtest 是独立的永续合约策略研究工作台。上游是 `agegr/pi-web`；第一版复用 Pi 的对话、图片附件、模型配置及工具循环，不把聊天记录当作回测账本。现有 `/backtest` 支持读取冻结基线和同数据对照；没有接入在线回测 API、挂载旧工作区或开放交易接口。
 
 ## 首条验收流程
 
@@ -14,7 +14,9 @@ Pi Backtest 是独立的永续合约策略研究工作台。上游是 `agegr/pi-
 
 样例用独立编写的 EMA3/8 多头交叉，收盘确认、次根开盘模拟成交、窗口尾收盘退出、每边 5 bps 手续费。**不计资金费、滑点、保证金或强平，不作策略推荐。** 点逐笔可定位开平仓和查看各自的信号时间；固定结果为 6 笔、1 笔净赚、净额 −0.509548 USDT。
 
-本地运行后，可执行 `node scripts/pi-backtest/smoke.mjs http://127.0.0.1:30141`（需 Playwright Chromium）验证路由、逐笔跳转以及刷新复原。
+将样例冻结为 B0：`python3 scripts/pi-backtest/baseline.py`。首次创建 B0 和 A1（只改快 EMA 3 → 4）；再次运行只用 B0 保存的 K 线重放并核对完整报告，已有文件不同则拒绝覆盖。`.pi-backtest/baseline.json` 和 `.pi-backtest/a1.json` 都不入 Git，保留归档、运行和成交数据的分离。页面只在父运行、行情哈希、引擎及其余策略口径一致时显示 A/B。对照按入场 K 线配对，不拿两次运行的行号硬配。
+
+本地运行后，可执行 `node scripts/pi-backtest/smoke.mjs http://127.0.0.1:30141 --baseline`（需 Playwright Chromium）验证基线、对照、逐笔跳转和刷新复原。只读内网入口加 `--direct`。当前只支持这一个候选，不开放参数提交、任意规则执行或 Agent 工具。
 
 ## 迁移边界
 
