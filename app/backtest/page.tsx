@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { loadRun } from "@/lib/backtest/baseline";
 import { HOUR_MS, loadSample, SAMPLE_SOURCE, type SampleReport, type SampleTrade } from "@/lib/backtest/sample";
+import { runTrial, tradeHref, trialMax } from "@/lib/backtest/trial";
 import { BaselineComparison } from "./baseline-comparison";
 import { SampleChart } from "./sample-chart";
 
@@ -27,11 +28,17 @@ function TradeEvidence({ report, trade }: { report: SampleReport; trade: SampleT
   </div>;
 }
 
-export default async function BacktestPage({ searchParams }: { searchParams: Promise<{ trade?: string | string[] }> }) {
-  const [{ trade }, b0, a1] = await Promise.all([searchParams, loadRun("baseline"), loadRun("a1")]);
+export default async function BacktestPage({ searchParams }: { searchParams: Promise<{ trade?: string | string[]; fast?: string | string[] }> }) {
+  const [{ trade, fast }, b0] = await Promise.all([searchParams, loadRun("baseline")]);
   const baseline = b0.status === "ready" ? b0.run : undefined;
   const sample = b0.status === "missing" ? await loadSample() : undefined;
   const report = baseline?.report ?? (sample?.status === "ready" ? sample.report : undefined);
+  const trial = baseline && fast !== undefined ? await runTrial(baseline, fast) : undefined;
+  const a1 = baseline && !trial ? await loadRun("a1") : undefined;
+  const variant = trial?.status === "ready" ? trial.run : a1?.status === "ready" ? a1.run : undefined;
+  const variantLabel = trial ? "试跑" : "A1";
+  const trialPeriod = trial?.status === "ready" ? trial.run.report.strategy.fast : undefined;
+  const periods = baseline ? Array.from({ length: trialMax(baseline) }, (_, i) => i + 1).filter((p) => p !== baseline.report.strategy.fast) : [];
   const selected = report?.trades.find(({ id }) => String(id) === trade) ?? report?.trades[0];
   return <main lang="zh-CN" className="h-dvh overflow-y-auto bg-bg text-text">
     <div className="mx-auto grid max-w-[1120px] gap-4 px-4 py-6 sm:px-8 sm:py-8">
@@ -52,8 +59,21 @@ export default async function BacktestPage({ searchParams }: { searchParams: Pro
           <p className="mt-2 text-sm">EMA {report.strategy.fast} 上穿 EMA {report.strategy.slow} 做多，下穿平多。收盘确认、下一根开盘模拟成交；只持一笔，窗口结束按最后收盘价退出。</p>
           <p className="mt-2 text-sm text-text-muted">名义仓位 {amount.format(report.strategy.notional)} USDT；手续费每边 {report.strategy.feeBps} bps。使用永续行情，但这个样例不模拟资金费、滑点、保证金或强平。</p>
           <p className="mt-2 text-sm text-text-muted">{utc(report.bars[0].time)} 至 {utc(report.bars.at(-1)!.time + HOUR_MS)} UTC（右开） · {report.bars.length} 根 · <a href={SAMPLE_SOURCE} className={linkStyle}>Binance 公共行情归档</a></p>
-          {baseline ? <a href="#baseline-comparison" className={`mt-2 inline-block text-sm ${linkStyle}`}>查看 B0 / A1 同数据对照</a> : <p className="mt-2 text-sm text-text-muted">这份样例尚未冻结为基线。</p>}
+          {baseline ? <a href="#baseline-comparison" className={`mt-2 inline-block text-sm ${linkStyle}`}>查看 B0 / {variantLabel} 同数据对照</a> : <p className="mt-2 text-sm text-text-muted">这份样例尚未冻结为基线。</p>}
         </section>
+        {baseline && periods.length > 0 && <section aria-labelledby="trial-title" className={panel}>
+          <h2 id="trial-title" className="font-semibold">参数试跑</h2>
+          <p className="mt-2 text-sm text-text-muted">只允许更改 EMA 快线。使用 B0 的同一行情、慢线、仓位和费用，不保存为新基线。</p>
+          <form action="/backtest#baseline-comparison" method="get" className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="grid gap-1 text-sm">EMA 快线周期
+              <select name="fast" defaultValue={trialPeriod ?? (periods.includes(4) ? 4 : periods[0])} className="rounded-md border border-border bg-bg px-3 py-2">
+                {periods.map((period) => <option key={period} value={period}>{period}</option>)}
+              </select>
+            </label>
+            <button type="submit" className="rounded-md border border-border bg-bg px-4 py-2 text-sm font-medium hover:bg-bg-selected">同快照重跑</button>
+            {trial && <Link href="/backtest#baseline-comparison" className={`self-center text-sm ${linkStyle}`}>返回 A1 对照</Link>}
+          </form>
+        </section>}
         <dl aria-label="样例绩效" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([
             ["净盈亏 (USDT)", amount.format(report.summary.net)],
@@ -78,7 +98,7 @@ export default async function BacktestPage({ searchParams }: { searchParams: Pro
               <table aria-label="报告逐笔成交" className="w-full min-w-[500px] text-left text-sm tabular-nums">
                 <thead className="text-text-muted"><tr>{["交易", "开仓 UTC", "平仓 UTC", "退出", "净盈亏 (USDT)"].map((heading) => <th scope="col" key={heading} className="p-2">{heading}</th>)}</tr></thead>
                 <tbody>{report.trades.map((item) => <tr key={item.id} className={item.id === selected?.id ? "bg-bg-selected" : ""}>
-                  <td className="p-2"><Link href={`/backtest?trade=${item.id}#sample-chart`} aria-current={item.id === selected?.id ? "true" : undefined} className={linkStyle}>查看第 {item.id} 笔</Link></td>
+                  <td className="p-2"><Link href={tradeHref(item.id, trialPeriod)} aria-current={item.id === selected?.id ? "true" : undefined} className={linkStyle}>查看第 {item.id} 笔</Link></td>
                   <td className="whitespace-nowrap p-2">{utc(report.bars[item.entry.bar].time)}</td>
                   <td className="whitespace-nowrap p-2">{item.exitReason === "cross" ? utc(report.bars[item.exit.bar].time) : closeUtc(report.bars[item.exit.bar].time)}</td>
                   <td className="p-2">{item.exitReason === "cross" ? "死叉" : "窗口结束"}</td>
@@ -87,7 +107,8 @@ export default async function BacktestPage({ searchParams }: { searchParams: Pro
               </table>
             </div>}
         </section>
-        {baseline && <BaselineComparison baseline={baseline} variant={a1.status === "ready" ? a1.run : undefined} formatTime={utc} formatClose={closeUtc} />}
+        {trial && trial.status !== "ready" && <p role="alert" className={panel}>{trial.status === "invalid" ? "快线周期必须是允许的整数，且不能与 B0 相同。" : "试跑未完成。B0 没有变更，请稍后重试。"}</p>}
+        {baseline && <BaselineComparison baseline={baseline} variant={variant} variantLabel={variantLabel} trialPeriod={trialPeriod} formatTime={utc} formatClose={closeUtc} />}
       </>}
     </div>
   </main>;

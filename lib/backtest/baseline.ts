@@ -28,16 +28,20 @@ export function marketHash(bars: MarketBar[]) {
 
 type RunResult = { status: "ready"; run: FrozenRun } | { status: "missing" | "invalid" };
 
+export function decodeRun(json: string, kind: "baseline" | "variant"): FrozenRun | null {
+  const run = JSON.parse(json) as FrozenRun | null;
+  if (run?.engine !== ENGINE || !hexId(run.runId) || !hexId(run.dataSha256) || !validateReport(run.report)) return null;
+  if (kind === "baseline" ? run.parentRunId !== null : !hexId(run.parentRunId)) return null;
+  const { fast, slow, notional, feeBps } = run.report.strategy;
+  if (run.dataSha256 !== marketHash(run.report.bars) || run.runId !== hash([run.engine, run.dataSha256, fast, slow, notional, feeBps])) return null;
+  return run;
+}
+
 export async function loadRun(kind: "baseline" | "a1", directory = join(process.cwd(), ".pi-backtest")): Promise<RunResult> {
   try {
-    const run = JSON.parse(await readFile(join(directory, `${kind}.json`), "utf8")) as FrozenRun | null;
-    if (run?.engine !== ENGINE || !hexId(run.runId) || !hexId(run.dataSha256) || !validateReport(run.report)) return { status: "invalid" };
-    if (kind === "baseline" ? run.parentRunId !== null : !hexId(run.parentRunId)) return { status: "invalid" };
-    const { fast, slow, notional, feeBps } = run.report.strategy;
-    if (run.dataSha256 !== marketHash(run.report.bars) || run.runId !== hash([run.engine, run.dataSha256, fast, slow, notional, feeBps])) {
-      return { status: "invalid" };
-    }
-    return { status: "ready", run };
+    const json = await readFile(join(directory, `${kind}.json`), "utf8");
+    const run = decodeRun(json, kind === "baseline" ? "baseline" : "variant");
+    return run ? { status: "ready", run } : { status: "invalid" };
   } catch (error) {
     return { status: (error as NodeJS.ErrnoException)?.code === "ENOENT" ? "missing" : "invalid" };
   }

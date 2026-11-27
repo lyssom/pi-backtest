@@ -1,6 +1,6 @@
 # Pi Backtest：产品底座
 
-Pi Backtest 是独立的永续合约策略研究工作台。上游是 `agegr/pi-web`；第一版复用 Pi 的对话、图片附件、模型配置及工具循环，不把聊天记录当作回测账本。现有 `/backtest` 支持读取冻结基线和同数据对照；没有接入在线回测 API、挂载旧工作区或开放交易接口。
+Pi Backtest 是独立的永续合约策略研究工作台。上游是 `agegr/pi-web`；第一版复用 Pi 的对话、图片附件、模型配置及工具循环，不把聊天记录当作回测账本。现有 `/backtest` 支持冻结基线、同数据对照和有界快线试跑；没有接入通用回测队列、挂载旧工作区或开放交易接口。
 
 ## 首条验收流程
 
@@ -16,7 +16,9 @@ Pi Backtest 是独立的永续合约策略研究工作台。上游是 `agegr/pi-
 
 将样例冻结为 B0：`python3 scripts/pi-backtest/baseline.py`。首次创建 B0 和 A1（只改快 EMA 3 → 4）；再次运行只用 B0 保存的 K 线重放并核对完整报告，已有文件不同则拒绝覆盖。`.pi-backtest/baseline.json` 和 `.pi-backtest/a1.json` 都不入 Git，保留归档、运行和成交数据的分离。页面只在父运行、行情哈希、引擎及其余策略口径一致时显示 A/B。对照按入场 K 线配对，不拿两次运行的行号硬配。
 
-本地运行后，可执行 `node scripts/pi-backtest/smoke.mjs http://127.0.0.1:30141 --baseline`（需 Playwright Chromium）验证基线、对照、逐笔跳转和刷新复原。只读内网入口加 `--direct`。当前只支持这一个候选，不开放参数提交、任意规则执行或 Agent 工具。
+「参数试跑」允许从 `1、2、4、5、6、7` 中选择一个 EMA 快线周期；页面和内部 `GET /api/backtest/trial?fast=5` 共用同一个执行服务。服务只运行固定 Python 程序、复用冻结的 B0、限制单次执行时间和输出，不写库、不联网、不开放任意规则。相同运行在同一服务实例内复用；URL 中的 `fast` 保留试跑选择，刷新能恢复或重现同一结果。这不是持久化任务，也不替换 B0 或 A1；Pi 尚未绑定该服务。
+
+本地运行后，可执行 `node scripts/pi-backtest/smoke.mjs http://127.0.0.1:30141 --baseline --trial`（需 Playwright Chromium）验证基线、试跑、逐笔、刷新和非法参数。内网入口加 `--direct`；内网网关只允许报告及受限参数，不放行内部 API。
 
 ## 迁移边界
 

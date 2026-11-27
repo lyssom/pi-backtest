@@ -2,7 +2,7 @@
 
 A strategy research workbench for crypto perpetual futures, built on [Pi Web](https://github.com/agegr/pi-web) and [Pi](https://github.com/earendil-works/pi).
 
-**Status: read-only baseline and comparison.** The strategy workspace shows a frozen baseline, evidence and one controlled variant. Agent research tools and browser job submission are not connected yet. No live trading or exchange-account access.
+**Status: frozen baseline and single-parameter trial.** The strategy workspace shows a pinned baseline, trade evidence and a bounded comparison. Browser trials re-use the frozen candles and never write to the baseline. The Pi tool loop and durable jobs are not connected yet. No live trading or exchange-account access.
 
 [中文产品说明与迁移边界](./docs/pi-backtest/FOUNDATION.zh-CN.md)
 
@@ -15,7 +15,7 @@ PI_CODING_AGENT_DIR="$HOME/.pi-backtest/agent" npm run dev
 
 Open <http://127.0.0.1:30141>. Use the separate agent directory to avoid sharing sessions and provider configuration with an existing Pi installation. The development bootstrap still exposes upstream coding features; run it on loopback only, not as a public service.
 
-To prepare the baseline and its comparison, run `python3 scripts/pi-backtest/baseline.py` and open [the read-only workspace](http://127.0.0.1:30141/backtest). The first run verifies a pinned public market archive; subsequent runs replay the saved candles without replacing the baseline. Neither the archive nor the generated reports are committed.
+To prepare the baseline and its comparison, run `python3 scripts/pi-backtest/baseline.py` and open [the workspace](http://127.0.0.1:30141/backtest). Use the parameter panel to try a different fast EMA. The first baseline import verifies a pinned public market archive; subsequent runs replay the saved candles without replacing the baseline. The source checkout and Python 3 are required for trials. Neither the archive nor the generated reports are committed.
 
 ---
 

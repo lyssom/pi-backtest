@@ -30,6 +30,22 @@ try {
   assert.equal(await page.getByTestId("selected-trade").count(), 1);
   await page.reload();
   await page.getByRole("img", { name: "K 线及第 2 笔模拟成交" }).waitFor();
+  if (process.argv.includes("--trial")) {
+    await page.getByLabel("EMA 快线周期").selectOption("5");
+    await page.getByRole("button", { name: "同快照重跑" }).click();
+    await page.waitForURL((url) => url.searchParams.get("fast") === "5");
+    const report = page.getByRole("region", { name: "同数据对照 · B0 / 试跑" });
+    await report.getByText("只改 EMA 快线：3 → 5。", { exact: false }).waitFor();
+    await page.getByRole("link", { name: "查看第 2 笔" }).click();
+    await page.waitForURL((url) => url.searchParams.get("fast") === "5" && url.searchParams.get("trade") === "2");
+    await page.reload();
+    await report.getByText("只改 EMA 快线：3 → 5。", { exact: false }).waitFor();
+    await page.getByRole("img", { name: "K 线及第 2 笔模拟成交" }).waitFor();
+    await page.goto(new URL("/backtest?fast=8", origin).href);
+    assert.match(await page.getByRole("main").getByRole("alert").textContent(), /快线周期必须/);
+    await page.getByRole("heading", { name: "冻结基线 · B0" }).waitFor();
+    console.log("Parameter trial passed: changed period, comparison, deep link, reload and invalid input");
+  }
   await page.setViewportSize({ width: 390, height: 760 });
   assert.ok(await page.evaluate(() => document.body.scrollWidth === window.innerWidth));
   console.log("Backtest browser smoke passed: report, six trades, selection, reload and mobile overflow");

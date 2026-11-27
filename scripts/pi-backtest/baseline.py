@@ -1,5 +1,6 @@
 """Freeze and verify the demo baseline and one controlled variant, offline after initial import."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -55,8 +56,17 @@ def record_run(path, run):
     return True
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--fast', type=int, choices=[1, 2, 4, 5, 6, 7],
+                        help='run a trial against frozen B0, output JSON, and write nothing')
+    args = parser.parse_args(argv)
     path = STORE / 'baseline.json'
+    if args.fast is not None:
+        baseline = replay_baseline(json.loads(path.read_bytes()))
+        run = make_run(baseline['report']['bars'], args.fast, baseline['runId'])
+        print(json.dumps(run, separators=(',', ':'), allow_nan=False))
+        return
     try:
         baseline = replay_baseline(json.loads(path.read_bytes()))
     except FileNotFoundError:

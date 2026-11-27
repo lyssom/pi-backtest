@@ -1,9 +1,12 @@
+import io
 import json
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-from baseline import make_run, record_run, replay_baseline
+from baseline import main, make_run, record_run, replay_baseline
 from prepare_sample import HOUR
 
 
@@ -30,6 +33,24 @@ class BaselineTest(unittest.TestCase):
             self.assertFalse(record_run(path, run))
             with self.assertRaisesRegex(ValueError, 'overwrite'):
                 record_run(path, make_run(self.bars, 4))
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_trial_replays_frozen_data_without_network_or_writes(self):
+        with TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = directory / 'baseline.json'
+            baseline = make_run(self.bars, 3)
+            record_run(path, baseline)
+            original = path.read_bytes()
+            with patch('baseline.STORE', directory), patch('baseline.fetch_bars', side_effect=AssertionError('no network')):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    main(['--fast', '5'])
+                self.assertEqual(json.loads(output.getvalue()), make_run(self.bars, 5, baseline['runId']))
+                for invalid in ['0', '3', '8', '1.5']:
+                    with self.assertRaises(SystemExit), patch('sys.stderr', io.StringIO()):
+                        main(['--fast', invalid])
+            self.assertEqual(list(directory.iterdir()), [path])
             self.assertEqual(path.read_bytes(), original)
 
     def test_replay_rejects_modified_report(self):
